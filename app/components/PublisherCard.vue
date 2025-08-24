@@ -1,16 +1,22 @@
 <script setup lang="ts">
-//@ts-expect-error
+//For some reaason, the types are not working correctly without this error suppression
+// @ts-expect-error
 import { JanusJs, JanusVideoRoomPlugin } from "typed_janus_js";
+import type {
+  JanusJs as JanusType,
+  JanusVideoRoomPlugin as JanusVideoRoomPluginType,
+  JanusSession,
+} from "@/types/janus";
+
 const localStream = ref<MediaStream | null>(null);
-const janus = ref<JanusJs | null>(null);
-const session = ref<any>(null);
-const publisher = ref<JanusVideoRoomPlugin | null>(null);
+const janus = ref<JanusType | null>(null);
+const session = ref<JanusSession | null>(null);
+const publisher = ref<JanusVideoRoomPluginType | null>(null);
 const isConnecting = ref(false);
 const isConnected = ref(false);
 const isPublishing = ref(false);
-const roomId = ref(1234); // Default room ID
-const publisherId = ref<number | null>(null); // Store the publisher's ID
-const mountpointId = ref(-1); // Default mountpoint ID
+const roomId = ref(1234);
+const publisherId = ref<number | null>(null);
 
 const status = computed(() => {
   if (isPublishing.value) return "Publishing";
@@ -26,88 +32,67 @@ const statusColor = computed(() => {
   return "error";
 });
 
-onMounted(async () => await getLocalStream());
+onMounted(async () => {
+  await init();
+});
 
-onUnmounted(() => cleanup());
-
-async function getLocalStream() {
-  try {
-    localStream.value = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720 },
-      audio: true,
+async function init() {
+  async function initJanus() {
+    janus.value = new JanusJs({
+      server: "wss://janus1.januscaler.com/janus/ws",
     });
-  } catch (error) {
-    // console.error("Error accessing media devices:", error);
-    throw error;
+    if (!janus?.value) return;
+    await janus.value.init({ debug: false });
   }
+
+  async function initLocalStream() {
+    try {
+      localStream.value = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 },
+        audio: true,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+  await initJanus();
+  await initLocalStream();
 }
 
 async function joinRoom() {
   try {
-    if (!localStream.value) console.error("No local stream available");
+    if (!janus?.value || !localStream?.value) await init();
+    if (!janus?.value) return console.error("Janus not initialized");
+    if (!localStream.value) return console.error("No local stream available");
+
     isConnecting.value = true;
 
-    janus.value = new JanusJs({
-      server: "wss://janus1.januscaler.com/janus/ws",
-    });
-    await janus.value.init({
-      debug: false,
-    });
-
     session.value = await janus.value.createSession();
-    publisher.value = await session.value.attach(JanusVideoRoomPlugin);
+    publisher.value = (await session.value.attach(
+      JanusVideoRoomPlugin,
+      {}
+    )) as JanusVideoRoomPluginType;
+    if (!publisher?.value) return;
     const username = `Publisher-${Date.now()}`;
     await publisher.value.joinRoomAsPublisher(roomId.value, {
       display: username,
     });
-    // Setup message handler
-    publisher.value.onMessage.subscribe(async ({ jsep, message }: any) => {
-      // console.log("Publisher message:", message, jsep);
 
+    // Setup message handler
+    publisher.value.onMessage.subscribe(async ({ jsep, message }) => {
       if (message?.videoroom === "joined") {
-        // console.log("Joined room successfully");
         isConnected.value = true;
         isConnecting.value = false;
-        // Store the publisher's ID (this is the feed ID that subscribers need)
         publisherId.value = message.id;
-        // console.log("Publisher ID (Feed ID):", publisherId.value);
-
-        // Register mountpoint with publisher ID
-        try {
-          const response = (await $fetch("/api/mountpoints", {
-            method: "POST",
-            body: {
-              description: `Live Stream from Room ${roomId.value}`,
-              roomId: roomId.value,
-              publisherId: publisherId.value, // Include the publisher ID
-            },
-          })) as any;
-          mountpointId.value = response?.id;
-
-          // console.log("Mountpoint registered:", response);
-        } catch (error) {
-          // console.error("Error registering mountpoint:", error);
-        }
       }
 
-      if (message?.videoroom === "event") {
-        if (message?.configured === "ok") {
-          // console.log("Publisher configured successfully");
-          isPublishing.value = true;
-        }
-      }
+      if (message?.videoroom === "event" && message?.configured === "ok")
+        isPublishing.value = true;
 
       if (jsep) await publisher.value?.handleRemoteJsep({ jsep });
     });
-
-    // // Setup remote track handler
-    // publisher.value.onRemoteTrack.subscribe(({ track, on, mid }: any) => {
-    //   // console.log("Remote track:", { track, on, mid });
-    // });
-
     // Join room as publisher
   } catch (error) {
-    // console.error("Error joining room:", error);
     isConnecting.value = false;
   }
 }
@@ -116,15 +101,30 @@ async function publish() {
   if (!publisher.value || !localStream.value) return;
 
   try {
+    await $fetch("/api/mountpoints", {
+      method: "POST",
+      body: {
+        description: `Live Stream from Room ${roomId.value}`,
+        roomId: roomId.value,
+      },
+    });
+  } catch (error) {
+    isPublishing.value = false;
+    return console.error("Error creating mountpoint:", error);
+  }
+
+  try {
     // Create offer and publish
     const offer = await publisher.value.createOffer({
       media: { audio: true, video: true },
-      stream: localStream.value,
+      tracks: [
+        { type: "video", capture: localStream.value.getVideoTracks()[0]! },
+        { type: "audio", capture: localStream.value.getAudioTracks()[0]! },
+      ],
     });
 
     await publisher.value.publishAsPublisher(offer, { bitrate: 2000000 });
   } catch (error) {
-    console.error("Error publishing:", error);
     isPublishing.value = false;
   }
 }
@@ -133,11 +133,12 @@ async function leaveRoom() {
   try {
     if (publisher.value) await publisher.value.detach();
 
-    if (session.value) await session.value.destroy();
+    if (session.value)
+      await session.value.destroy({ notifyDestroyed: true, unload: true });
 
     await $fetch("/api/mountpoints", {
       method: "DELETE",
-      body: { id: mountpointId.value },
+      body: { roomId: roomId.value },
     });
   } catch (error) {
     console.error("Error leaving room:", error);
@@ -147,7 +148,6 @@ async function leaveRoom() {
 }
 
 function cleanup() {
-  leaveRoom();
   if (localStream.value) {
     localStream.value.getTracks().forEach((track) => track.stop());
     localStream.value = null;
@@ -160,8 +160,11 @@ function cleanup() {
   publisher.value = null;
   session.value = null;
   janus.value = null;
-  mountpointId.value = -1;
 }
+
+onUnmounted(() => {
+  leaveRoom();
+});
 </script>
 
 <template>
@@ -177,10 +180,10 @@ function cleanup() {
       </div>
     </template>
 
-    <div class="space-y-6">
-      <div
-        class="relative bg-gray-100 rounded-lg overflow-hidden"
-        style="aspect-ratio: 16/9"
+    <main class="space-y-6">
+      <section
+        aria-role="video-section"
+        class="relative bg-gray-100 rounded-lg overflow-hidden aspect-video"
       >
         <video
           :srcObject="localStream"
@@ -195,9 +198,9 @@ function cleanup() {
         >
           No camera stream
         </div>
-      </div>
+      </section>
 
-      <div class="flex gap-3 justify-center">
+      <footer aria-role="controls" class="flex gap-3 justify-center">
         <UButton
           @click="joinRoom"
           :disabled="isConnected || isConnecting"
@@ -224,13 +227,7 @@ function cleanup() {
         >
           Leave Room
         </UButton>
-      </div>
-
-      <!-- Room Info -->
-      <!-- <div v-if="isConnected" class="text-sm text-gray-600 text-center">
-        Room ID: {{ roomId }}
-        <div v-if="publisherId">Publisher ID (Feed): {{ publisherId }}</div>
-      </div> -->
-    </div>
+      </footer>
+    </main>
   </UCard>
 </template>

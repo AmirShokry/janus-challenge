@@ -1,26 +1,58 @@
 <script setup lang="ts">
 //@ts-expect-error
+//For some reaason, the types are not working correctly without this error suppression
 import { JanusJs, JanusVideoRoomPlugin } from "typed_janus_js";
+import type {
+  JanusJs as JanusType,
+  JanusSession,
+  JanusVideoRoomPlugin as JanusVideoRoomPluginType,
+} from "@/types/janus";
+import type { Mountpoint } from "@@/shared/types";
 
-interface Mountpoint {
+interface Participant {
   id: number;
-  description: string;
-  roomId: number | null;
-  publisherId: number | null;
-  createdAt: string;
+  display: string;
+  talking: boolean;
+  publisher: true;
 }
 
-const remoteVideo = ref<HTMLVideoElement>();
 const remoteStream = ref<MediaStream | null>(null);
-const janus = ref<JanusJs | null>(null);
-const session = ref<any>(null);
-const subscriber = ref<any>(null);
+const janus = ref<JanusType | null>(null);
+const session = ref<JanusSession | null>(null);
+const subscriber = ref<JanusVideoRoomPluginType | null>(null);
 const isConnecting = ref(false);
 const isPlaying = ref(false);
 const isRefreshing = ref(false);
 
 const mountpoints = ref<Mountpoint[]>([]);
 const selectedMountpoint = ref<number | null>(null);
+
+onMounted(async () => {
+  await fetchMountpoints();
+  await initJanus();
+});
+
+async function fetchMountpoints() {
+  try {
+    isRefreshing.value = true;
+    const data = await $fetch<Mountpoint[]>("/api/mountpoints");
+    mountpoints.value = data;
+  } catch (error) {
+  } finally {
+    isRefreshing.value = false;
+  }
+}
+async function initJanus() {
+  janus.value = new JanusJs({
+    server: "wss://janus1.januscaler.com/janus/ws",
+  });
+  if (!janus?.value) return;
+  await janus.value.init({ debug: false });
+}
+
+function refreshMountpoints() {
+  fetchMountpoints();
+}
 
 const mountpointOptions = computed(() => {
   return mountpoints.value.map((mp) => ({
@@ -41,152 +73,105 @@ const statusColor = computed(() => {
   return "error";
 });
 
-async function fetchMountpoints() {
-  try {
-    isRefreshing.value = true;
-    // console.log("Fetching mountpoints...");
-    const data = await $fetch<Mountpoint[]>("/api/mountpoints");
-    mountpoints.value = data;
-    // console.log("Fetched mountpoints:", data);
-    // console.log("Mountpoints count:", data.length);
-  } catch (error) {
-    // console.error("Error fetching mountpoints:", error);
-  } finally {
-    isRefreshing.value = false;
-  }
-}
-
-function refreshMountpoints() {
-  fetchMountpoints();
-}
-
 async function play() {
-  if (!selectedMountpoint.value) return;
+  if (!selectedMountpoint.value || !janus.value) return;
 
   try {
     isConnecting.value = true;
-    // console.log("Starting playback for mountpoint (room):",selectedMountpoint.value);
 
-    // Get the mountpoint details
     const mountpoint = mountpoints.value.find(
       (mp) => mp.id === selectedMountpoint.value
     );
     if (!mountpoint || !mountpoint.roomId) {
-      // console.error("Invalid mountpoint or no room ID");
       isConnecting.value = false;
       return;
     }
 
-    janus.value = new JanusJs({
-      server: "wss://janus1.januscaler.com/janus/ws",
-    });
-    await janus.value.init({ debug: false });
-
     session.value = await janus.value.createSession();
-    subscriber.value = await session.value.attach(JanusVideoRoomPlugin);
+    subscriber.value = (await session.value.attach(
+      JanusVideoRoomPlugin,
+      {}
+    )) as JanusVideoRoomPluginType;
+
+    const { participants }: Record<string, Participant[]> =
+      (await subscriber.value.listParticipants(mountpoint.roomId)) || {};
+    const firstParticiapnt = participants?.at(0);
+
+    await subscriber.value.joinRoomAsSubscriber(mountpoint.roomId, {
+      streams: [
+        {
+          feed: firstParticiapnt?.id!,
+          mid: "0" as any,
+        },
+        {
+          feed: firstParticiapnt?.id!,
+          mid: "1" as any,
+        },
+      ],
+    });
 
     // Setup message handler for videoroom subscriber
-    subscriber.value.onMessage.subscribe(async ({ jsep, message }: any) => {
-      console.log("=== Subscriber message received ===");
-      console.log(message);
-      // console.log("📩 Subscriber message received");
-      // console.log("=== Subscriber message received ===");
-      // console.log("Message:", JSON.stringify(message, null, 2));
-      // console.log("JSEP:", jsep);
-
+    subscriber.value.onMessage.subscribe(async ({ jsep, message }) => {
       if (message?.videoroom === "joined")
         console.log("🚪 Joined room as subscriber");
-      // console.log("✅ Joined room successfully as subscriber");
 
-      if (message?.videoroom === "event") {
-        // console.log("📢 VideoRoom event received");
+      if (message?.videoroom === "event" && message?.error)
+        return (isConnecting.value = false);
 
-        if (message?.error) {
-          // console.error("❌ VideoRoom error:",message.error,"Code:",message.error_code);
-          isConnecting.value = false;
-          return;
-        }
-
-        // Handle new publishers joining
-        if (message?.publishers && message.publishers.length > 0)
-          console.log("👥 New publishers detected:", message.publishers);
-      }
-
-      if (jsep) {
-        // console.log("🔄 Handling JSEP offer from publisher:", jsep);
-        try {
-          const answer = await subscriber.value?.createAnswer({
-            jsep: jsep,
-            media: {
-              audioSend: false,
-              videoSend: false,
-              audio: true,
-              video: true,
+      if (!jsep) return;
+      try {
+        const answer = await subscriber.value?.createAnswer({
+          jsep,
+          tracks: [
+            {
+              type: "video",
+              capture: false,
+              recv: true,
             },
-          });
+            {
+              type: "audio",
+              capture: false,
+              recv: true,
+            },
+          ],
+          media: {
+            audioSend: false,
+            videoSend: false,
+          },
+        });
 
-          if (answer) {
-            // console.log("📤 Sending answer:", answer);
-            await subscriber.value?.send({
-              message: { request: "start" },
-              jsep: answer,
-            });
-            // console.log("✅ Started subscriber session");
-            isPlaying.value = true;
-            isConnecting.value = false;
-          }
-        } catch (error) {
-          // console.error("❌ Error handling JSEP:", error);
+        if (answer) {
+          await subscriber.value?.send({
+            message: { request: "start" },
+            jsep: answer,
+          });
+          isPlaying.value = true;
           isConnecting.value = false;
         }
+      } catch (error) {
+        isConnecting.value = false;
       }
     });
 
     // Setup remote track handler
-    subscriber.value.onRemoteTrack.subscribe(({ track, on, mid }: any) => {
-      // console.log("🎥 Remote track event:", {track: track.kind,on,mid,id: track.id,});
-
+    subscriber.value.onRemoteTrack.subscribe(({ track, on, mid }) => {
       if (on) {
         if (!remoteStream.value) remoteStream.value = new MediaStream();
         remoteStream.value.addTrack(track);
-        // console.log("✅ Added",track.kind,"track. Total tracks:",remoteStream.value.getTracks().length);
       } else {
-        if (remoteStream.value) {
-          remoteStream.value.removeTrack(track);
-          // console.log("❌ Removed", track.kind, "track");
-        }
+        if (remoteStream.value) remoteStream.value.removeTrack(track);
+        isPlaying.value = false;
+        remoteStream.value = null;
       }
     });
-
-    // Join as subscriber with the specific feed ID from the mountpoint
-    // console.log("🚪 Joining room as subscriber with feed ID...");
-    try {
-      // console.log(`Trying to connect`);
-      await subscriber.value?.send({
-        message: {
-          request: "join",
-          room: mountpoint.roomId,
-          ptype: "subscriber",
-          feed: mountpoint.publisherId,
-          display: `Viewer-${Date.now()}`,
-        },
-      });
-      // console.log("✅ Join request sent successfully");
-    } catch (error) {
-      // console.error("❌ Error joining room:", error);
-      isConnecting.value = false;
-      return;
-    }
   } catch (error) {
-    // console.error("Error starting playback:", error);
     isConnecting.value = false;
   }
 }
 async function stop() {
   try {
     if (subscriber.value) await subscriber.value.detach();
-
-    if (session.value) await session.value.destroy();
+    if (session.value) await session.value.destroy({ unload: true });
   } catch (error) {
     console.error("Error stopping stream:", error);
   }
@@ -202,10 +187,6 @@ function cleanup() {
   session.value = null;
   janus.value = null;
 }
-
-onMounted(() => {
-  fetchMountpoints();
-});
 
 onUnmounted(() => {
   cleanup();
@@ -223,51 +204,26 @@ onUnmounted(() => {
       </div>
     </template>
 
-    <div class="space-y-6">
-      <!-- Mountpoint Selection -->
-      <div>
+    <main class="space-y-6">
+      <section aria-role="selection">
         <label class="block text-sm font-medium text-primary mb-2">
           Select Mountpoint ({{ mountpoints.length }} available)
         </label>
-
-        <!-- Test with native select first -->
         <USelect
           v-model="selectedMountpoint!"
           :items="mountpointOptions"
           class="w-full p-2 border border-gray-300 glass-card rounded-md mb-2"
-          :disabled="isPlaying"
+          :disabled="isPlaying || isConnecting || mountpoints.length <= 0"
         >
         </USelect>
+      </section>
 
-        <!-- Debug info -->
-        <!-- <div v-if="mountpoints.length > 0" class="mt-2 text-xs text-gray-500">
-          Debug: Found {{ mountpoints.length }} mountpoints<br />
-          Selected: {{ selectedMountpoint }}<br />
-          <details>
-            <summary>Raw data</summary>
-            <pre class="text-xs">{{
-              JSON.stringify(mountpoints, null, 2)
-            }}</pre>
-          </details>
-          <details>
-            <summary>Options data</summary>
-            <pre class="text-xs">{{
-              JSON.stringify(mountpointOptions, null, 2)
-            }}</pre>
-          </details>
-        </div>
-        <div v-else class="mt-2 text-xs text-red-500">
-          No mountpoints available. Make sure a publisher is active.
-        </div> -->
-      </div>
-
-      <!-- Remote Video -->
-      <div
+      <section
+        aria-role="video-section"
         class="relative rounded-lg overflow-hidden"
         style="aspect-ratio: 16/9"
       >
         <video
-          ref="remoteVideo"
           :srcObject="remoteStream"
           autoplay
           playsinline
@@ -284,10 +240,9 @@ onUnmounted(() => {
               : "No stream selected"
           }}
         </div>
-      </div>
+      </section>
 
-      <!-- Controls -->
-      <div class="flex gap-3 justify-center">
+      <footer aria-role="controls" class="flex gap-3 justify-center">
         <UButton
           @click="play"
           :disabled="!selectedMountpoint || isPlaying || isConnecting"
@@ -314,19 +269,7 @@ onUnmounted(() => {
         >
           Refresh
         </UButton>
-      </div>
-
-      <!-- Stream Info -->
-      <div
-        v-if="selectedMountpoint && mountpoints.length > 0"
-        class="text-sm text-gray-600 text-center"
-      >
-        Mountpoint ID: {{ selectedMountpoint }}
-        <br />
-        {{
-          mountpoints.find((mp) => mp.id === selectedMountpoint)?.description
-        }}
-      </div>
-    </div>
+      </footer>
+    </main>
   </UCard>
 </template>

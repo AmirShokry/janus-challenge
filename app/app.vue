@@ -1,39 +1,24 @@
 <script setup>
 import { useColorMode } from "@vueuse/core";
-useColorMode();
+const mode = useColorMode();
+const theme = computed(() => mode.value);
+function toggleTheme() {
+  mode.value = mode.value === "dark" ? "light" : "dark";
+}
 </script>
 
 <template>
   <UApp>
-    <div class="main">
-      <ThemeToggle />
-      <NuxtPage />
-    </div>
+    <button
+      @click="toggleTheme"
+      class="fixed top-8 right-8 z-50 cursor-pointer hover:scale-105 rounded-full bg-(--card-bg) size-10 flex items-center justify-center"
+      :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+    >
+      <Icon
+        :name="theme === 'dark' ? 'heroicons:sun' : 'heroicons:moon'"
+        class="size-6"
+      />
+    </button>
+    <NuxtPage />
   </UApp>
 </template>
-
-<style scoped>
-.main {
-  position: relative;
-  min-height: 100vh;
-  background: light-dark(white, black);
-}
-
-.dark .main::before {
-  opacity: 0.19;
-}
-
-.main::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.8;
-
-  background: url("@/assets/grain.svg");
-}
-</style>
