@@ -33,7 +33,7 @@ useHead({
           Join a room and publish your webcam stream
         </p>
       </header>
-      <main class="max-w-4xl mx-auto fade-in-up" style="animation-delay: 0.2s">
+      <main class="max-w-4xl mx-auto fade-in-up delay-[0.2s]">
         <div class="rounded-2xl p-1">
           <PublisherCard />
         </div>
