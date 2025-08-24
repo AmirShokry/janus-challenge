@@ -1,5 +1,4 @@
 <script setup>
-// Set page metadata
 useHead({
   title: "WebRTC Viewer - Streaming",
   meta: [
@@ -10,15 +9,37 @@ useHead({
   ],
 });
 </script>
-<template>
-  <div class="min-h-screen bg-gray-50 py-8">
-    <div class="container mx-auto px-4">
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">WebRTC Viewer</h1>
-        <p class="text-gray-600">Watch live streams from Janus mountpoints</p>
-      </div>
 
-      <ViewerCard />
+<template>
+  <div class="min-h-screen relative z-10 py-8">
+    <div class="container mx-auto px-4">
+      <nav class="mb-8">
+        <NuxtLink
+          to="/"
+          class="inline-flex items-center text-secondary hover:text-primary transition-colors"
+        >
+          <Icon name="heroicons:arrow-left" class="w-4 h-4 mr-2" />
+          Back to Home
+        </NuxtLink>
+      </nav>
+
+      <header class="text-center mb-8 fade-in-up">
+        <div
+          class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl mb-4 shadow-lg"
+        >
+          <Icon name="heroicons:eye" class="w-8 h-8 text" />
+        </div>
+        <h1 class="text-4xl font-bold text-primary mb-2">WebRTC Viewer</h1>
+        <p class="text-lg text-secondary max-w-md mx-auto">
+          Watch streams from live mountpoints
+        </p>
+      </header>
+
+      <main class="max-w-4xl mx-auto fade-in-up delay-[0.2s]">
+        <div class="rounded-2xl p-1">
+          <ViewerCard />
+        </div>
+      </main>
     </div>
   </div>
 </template>

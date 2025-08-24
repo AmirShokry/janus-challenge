@@ -1,5 +1,4 @@
 <script setup>
-// Set page metadata
 useHead({
   title: "Janus WebRTC Demo - Home",
   meta: [
@@ -13,133 +12,145 @@ useHead({
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen flex items-center">
     <div class="container mx-auto px-4 py-16">
-      <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-gray-900 mb-4">Janus WebRTC Demo</h1>
-        <p class="text-xl text-gray-600 max-w-2xl mx-auto">
+      <header class="text-center mb-12 fade-in-up">
+        <h1 class="text-5xl font-bold text-primary mb-6 float-animation">
+          Janus Challenge
+        </h1>
+        <p class="text-xl text-secondary max-w-2xl mx-auto leading-relaxed">
           A mini WebRTC demo app built with Nuxt4 and Janus. Publish your webcam
           stream or watch live streams from mountpoints.
         </p>
-      </div>
+      </header>
 
-      <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        <!-- Publisher Card -->
-        <UCard class="hover:shadow-lg transition-shadow">
-          <template #header>
-            <div class="flex items-center">
-              <div
-                class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4"
-              >
-                <svg
-                  class="w-6 h-6 text-blue-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  ></path>
-                </svg>
-              </div>
-              <div>
-                <h3 class="text-lg font-semibold">Publisher</h3>
-                <p class="text-sm text-gray-600">Broadcast your webcam</p>
-              </div>
+      <main class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto items-stretch">
+        <section
+          arial-role="publisher-section"
+          class="glass-card rounded-2xl p-6 hover:transform hover:scale-105 transition-all duration-300 fade-in-up flex flex-col h-full"
+        >
+          <div class="flex items-center mb-6">
+            <div
+              class="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mr-4 shadow-lg"
+            >
+              <Icon name="heroicons:video-camera" class="w-7 h-7 text-white" />
             </div>
-          </template>
+            <div>
+              <h3 class="text-xl font-bold text-primary">Publisher</h3>
+              <p class="text-sm text-secondary">Broadcast your webcam</p>
+            </div>
+          </div>
 
-          <div class="space-y-4">
-            <p class="text-gray-700">
+          <div class="space-y-4 flex flex-col flex-1">
+            <p class="text-secondary leading-relaxed">
               Join a Janus videoroom and publish your webcam stream. Your stream
               will be automatically registered as a mountpoint for viewers.
             </p>
 
-            <ul class="text-sm text-gray-600 space-y-1">
-              <li>• Access your webcam and microphone</li>
-              <li>• Join a Janus videoroom</li>
-              <li>• Publish live stream</li>
-              <li>• Auto-register mountpoint</li>
+            <ul class="text-sm text-secondary space-y-2">
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-blue-500"
+                />
+                Access your webcam and microphone
+              </li>
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-blue-500"
+                />
+                Join a Janus videoroom
+              </li>
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-blue-500"
+                />
+                Publish live stream
+              </li>
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-blue-500"
+                />
+                Auto-register mountpoint
+              </li>
             </ul>
 
-            <NuxtLink to="/videoroom">
-              <UButton color="blue" size="lg" block> Start Publishing </UButton>
+            <NuxtLink to="/videoroom" class="block mt-auto">
+              <UButton
+                class="cursor-pointer w-full py-3 px-6 bg-blue-600 hover:bg-blue-500 text-white text-shadow-2xs rounded-xl font-semibold text-lg justify-center"
+              >
+                Start Publishing
+              </UButton>
             </NuxtLink>
           </div>
-        </UCard>
+        </section>
 
-        <!-- Viewer Card -->
-        <UCard class="hover:shadow-lg transition-shadow">
-          <template #header>
-            <div class="flex items-center">
-              <div
-                class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4"
-              >
-                <svg
-                  class="w-6 h-6 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m-9-4V8a3 3 0 016 0v2M5 18h14a2 2 0 002-2v-8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  ></path>
-                </svg>
-              </div>
-              <div>
-                <h3 class="text-lg font-semibold">Viewer</h3>
-                <p class="text-sm text-gray-600">Watch live streams</p>
-              </div>
+        <section
+          arial-role="viewer-section"
+          class="glass-card rounded-2xl p-6 hover:transform hover:scale-105 transition-all duration-300 fade-in-up flex flex-col h-full delay-[0.2s]"
+        >
+          <div class="flex items-center mb-6">
+            <div
+              class="w-14 h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center mr-4 shadow-lg"
+            >
+              <Icon name="heroicons:eye" class="w-7 h-7 text-white" />
             </div>
-          </template>
+            <div>
+              <h3 class="text-xl font-bold text-primary">Viewer</h3>
+              <p class="text-sm text-secondary">Watch live streams</p>
+            </div>
+          </div>
 
-          <div class="space-y-4">
-            <p class="text-gray-700">
+          <div class="space-y-4 flex flex-col flex-1">
+            <p class="text-secondary leading-relaxed">
               Select from available mountpoints and watch live streams via the
               Janus streaming plugin.
             </p>
 
-            <ul class="text-sm text-gray-600 space-y-1">
-              <li>• Browse available mountpoints</li>
-              <li>• Select streams to watch</li>
-              <li>• Real-time video playback</li>
-              <li>• Stream controls</li>
+            <ul class="text-sm text-secondary space-y-2">
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-green-500"
+                />
+                Browse available mountpoints
+              </li>
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-green-500"
+                />
+                Select streams to watch
+              </li>
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-green-500"
+                />
+                Real-time video playback
+              </li>
+              <li class="flex items-center">
+                <Icon
+                  name="heroicons:check-circle"
+                  class="w-4 h-4 mr-2 text-green-500"
+                />
+                Stream controls
+              </li>
             </ul>
 
-            <NuxtLink to="/streaming">
-              <UButton color="green" size="lg" block> Start Watching </UButton>
+            <NuxtLink to="/streaming" class="block mt-auto">
+              <UButton
+                class="cursor-pointer bg-green-600 text-white text-shadow-2xs w-full py-3 px-6 custom-button rounded-xl font-semibold text-lg justify-center"
+              >
+                Start Watching
+              </UButton>
             </NuxtLink>
           </div>
-        </UCard>
-      </div>
-
-      <!-- Technical Info -->
-      <div class="mt-16 text-center">
-        <UCard class="max-w-2xl mx-auto">
-          <template #header>
-            <h3 class="text-lg font-semibold text-center">Technical Details</h3>
-          </template>
-
-          <div class="space-y-3 text-sm text-gray-600">
-            <p>
-              <strong>Janus Server:</strong>
-              wss://janus1.januscaler.com/janus/ws
-            </p>
-            <p>
-              <strong>Plugins Used:</strong> janus.plugin.videoroom,
-              janus.plugin.streaming
-            </p>
-            <p><strong>Framework:</strong> Nuxt 4 with Nuxt UI Pro</p>
-            <p><strong>WebRTC Library:</strong> typed_janus_js</p>
-          </div>
-        </UCard>
-      </div>
+        </section>
+      </main>
     </div>
   </div>
 </template>

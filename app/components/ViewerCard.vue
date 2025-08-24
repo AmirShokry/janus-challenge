@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// @ts-ignore
+//@ts-expect-error
 import { JanusJs, JanusVideoRoomPlugin } from "typed_janus_js";
 
 interface Mountpoint {
@@ -23,7 +23,6 @@ const mountpoints = ref<Mountpoint[]>([]);
 const selectedMountpoint = ref<number | null>(null);
 
 const mountpointOptions = computed(() => {
-  console.log("Computing mountpoint options from:", mountpoints.value);
   return mountpoints.value.map((mp) => ({
     label: `${mp.description} (ID: ${mp.id})`,
     value: mp.id,
@@ -45,13 +44,13 @@ const statusColor = computed(() => {
 async function fetchMountpoints() {
   try {
     isRefreshing.value = true;
-    console.log("Fetching mountpoints...");
+    // console.log("Fetching mountpoints...");
     const data = await $fetch<Mountpoint[]>("/api/mountpoints");
     mountpoints.value = data;
-    console.log("Fetched mountpoints:", data);
-    console.log("Mountpoints count:", data.length);
+    // console.log("Fetched mountpoints:", data);
+    // console.log("Mountpoints count:", data.length);
   } catch (error) {
-    console.error("Error fetching mountpoints:", error);
+    // console.error("Error fetching mountpoints:", error);
   } finally {
     isRefreshing.value = false;
   }
@@ -66,17 +65,14 @@ async function play() {
 
   try {
     isConnecting.value = true;
-    console.log(
-      "Starting playback for mountpoint (room):",
-      selectedMountpoint.value
-    );
+    // console.log("Starting playback for mountpoint (room):",selectedMountpoint.value);
 
     // Get the mountpoint details
     const mountpoint = mountpoints.value.find(
       (mp) => mp.id === selectedMountpoint.value
     );
     if (!mountpoint || !mountpoint.roomId) {
-      console.error("Invalid mountpoint or no room ID");
+      // console.error("Invalid mountpoint or no room ID");
       isConnecting.value = false;
       return;
     }
@@ -87,31 +83,26 @@ async function play() {
     await janus.value.init({ debug: false });
 
     session.value = await janus.value.createSession();
-
-    // Attach to videoroom plugin using the proper typed plugin
-    console.log("🔌 Attaching to videoroom plugin...");
     subscriber.value = await session.value.attach(JanusVideoRoomPlugin);
-    console.log("✅ Attached to videoroom plugin successfully");
 
     // Setup message handler for videoroom subscriber
     subscriber.value.onMessage.subscribe(async ({ jsep, message }: any) => {
       console.log("=== Subscriber message received ===");
-      console.log("Message:", JSON.stringify(message, null, 2));
-      console.log("JSEP:", jsep);
+      console.log(message);
+      // console.log("📩 Subscriber message received");
+      // console.log("=== Subscriber message received ===");
+      // console.log("Message:", JSON.stringify(message, null, 2));
+      // console.log("JSEP:", jsep);
 
       if (message?.videoroom === "joined")
-        console.log("✅ Joined room successfully as subscriber");
+        console.log("🚪 Joined room as subscriber");
+      // console.log("✅ Joined room successfully as subscriber");
 
       if (message?.videoroom === "event") {
-        console.log("📢 VideoRoom event received");
+        // console.log("📢 VideoRoom event received");
 
         if (message?.error) {
-          console.error(
-            "❌ VideoRoom error:",
-            message.error,
-            "Code:",
-            message.error_code
-          );
+          // console.error("❌ VideoRoom error:",message.error,"Code:",message.error_code);
           isConnecting.value = false;
           return;
         }
@@ -122,7 +113,7 @@ async function play() {
       }
 
       if (jsep) {
-        console.log("🔄 Handling JSEP offer from publisher:", jsep);
+        // console.log("🔄 Handling JSEP offer from publisher:", jsep);
         try {
           const answer = await subscriber.value?.createAnswer({
             jsep: jsep,
@@ -135,17 +126,17 @@ async function play() {
           });
 
           if (answer) {
-            console.log("📤 Sending answer:", answer);
+            // console.log("📤 Sending answer:", answer);
             await subscriber.value?.send({
               message: { request: "start" },
               jsep: answer,
             });
-            console.log("✅ Started subscriber session");
+            // console.log("✅ Started subscriber session");
             isPlaying.value = true;
             isConnecting.value = false;
           }
         } catch (error) {
-          console.error("❌ Error handling JSEP:", error);
+          // console.error("❌ Error handling JSEP:", error);
           isConnecting.value = false;
         }
       }
@@ -153,54 +144,41 @@ async function play() {
 
     // Setup remote track handler
     subscriber.value.onRemoteTrack.subscribe(({ track, on, mid }: any) => {
-      console.log("🎥 Remote track event:", {
-        track: track.kind,
-        on,
-        mid,
-        id: track.id,
-      });
+      // console.log("🎥 Remote track event:", {track: track.kind,on,mid,id: track.id,});
 
       if (on) {
-        if (!remoteStream.value) {
-          remoteStream.value = new MediaStream();
-          console.log("📺 Created new MediaStream");
-        }
+        if (!remoteStream.value) remoteStream.value = new MediaStream();
         remoteStream.value.addTrack(track);
-        console.log(
-          "✅ Added",
-          track.kind,
-          "track. Total tracks:",
-          remoteStream.value.getTracks().length
-        );
+        // console.log("✅ Added",track.kind,"track. Total tracks:",remoteStream.value.getTracks().length);
       } else {
         if (remoteStream.value) {
           remoteStream.value.removeTrack(track);
-          console.log("❌ Removed", track.kind, "track");
+          // console.log("❌ Removed", track.kind, "track");
         }
       }
     });
 
     // Join as subscriber with the specific feed ID from the mountpoint
-    console.log("🚪 Joining room as subscriber with feed ID...");
+    // console.log("🚪 Joining room as subscriber with feed ID...");
     try {
-      const joinMessage = {
-        request: "join",
-        room: mountpoint.roomId,
-        ptype: "subscriber",
-        feed: mountpoint.publisherId, // Use the publisher ID from mountpoint
-        display: `Viewer-${Date.now()}`,
-      };
-
-      console.log("📤 Sending join message:", joinMessage);
-      await subscriber.value?.send({ message: joinMessage });
-      console.log("✅ Join request sent successfully");
+      // console.log(`Trying to connect`);
+      await subscriber.value?.send({
+        message: {
+          request: "join",
+          room: mountpoint.roomId,
+          ptype: "subscriber",
+          feed: mountpoint.publisherId,
+          display: `Viewer-${Date.now()}`,
+        },
+      });
+      // console.log("✅ Join request sent successfully");
     } catch (error) {
-      console.error("❌ Error joining room:", error);
+      // console.error("❌ Error joining room:", error);
       isConnecting.value = false;
       return;
     }
   } catch (error) {
-    console.error("Error starting playback:", error);
+    // console.error("Error starting playback:", error);
     isConnecting.value = false;
   }
 }
@@ -235,10 +213,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <UCard class="max-w-2xl mx-auto">
+  <UCard class="max-w-2xl mx-auto glass-card">
     <template #header>
       <div class="flex items-center justify-between">
-        <h3 class="text-lg font-semibold">Viewer - Streaming</h3>
+        <h3 class="text-lg font-semibold text-primary">Viewer - Streaming</h3>
         <UBadge :color="statusColor">
           {{ status }}
         </UBadge>
@@ -248,32 +226,21 @@ onUnmounted(() => {
     <div class="space-y-6">
       <!-- Mountpoint Selection -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2">
+        <label class="block text-sm font-medium text-primary mb-2">
           Select Mountpoint ({{ mountpoints.length }} available)
         </label>
 
         <!-- Test with native select first -->
-        <select
-          v-model="selectedMountpoint"
-          class="w-full p-2 border border-gray-300 rounded-md mb-2"
+        <USelect
+          v-model="selectedMountpoint!"
+          :items="mountpointOptions"
+          class="w-full p-2 border border-gray-300 glass-card rounded-md mb-2"
           :disabled="isPlaying"
         >
-          <option value="">Choose a mountpoint...</option>
-          <option v-for="mp in mountpoints" :key="mp.id" :value="mp.id">
-            {{ mp.description }} (ID: {{ mp.id }})
-          </option>
-        </select>
-
-        <!-- Nuxt UI Select -->
-        <USelect
-          v-model="selectedMountpoint"
-          :options="mountpointOptions"
-          placeholder="Choose a mountpoint..."
-          :disabled="isPlaying"
-        />
+        </USelect>
 
         <!-- Debug info -->
-        <div v-if="mountpoints.length > 0" class="mt-2 text-xs text-gray-500">
+        <!-- <div v-if="mountpoints.length > 0" class="mt-2 text-xs text-gray-500">
           Debug: Found {{ mountpoints.length }} mountpoints<br />
           Selected: {{ selectedMountpoint }}<br />
           <details>
@@ -291,12 +258,12 @@ onUnmounted(() => {
         </div>
         <div v-else class="mt-2 text-xs text-red-500">
           No mountpoints available. Make sure a publisher is active.
-        </div>
+        </div> -->
       </div>
 
       <!-- Remote Video -->
       <div
-        class="relative bg-gray-100 rounded-lg overflow-hidden"
+        class="relative rounded-lg overflow-hidden"
         style="aspect-ratio: 16/9"
       >
         <video

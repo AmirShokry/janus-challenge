@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// @ts-ignore
+//@ts-expect-error
 import { JanusJs, JanusVideoRoomPlugin } from "typed_janus_js";
-
 const localStream = ref<MediaStream | null>(null);
 const janus = ref<JanusJs | null>(null);
 const session = ref<any>(null);
@@ -11,6 +10,7 @@ const isConnected = ref(false);
 const isPublishing = ref(false);
 const roomId = ref(1234); // Default room ID
 const publisherId = ref<number | null>(null); // Store the publisher's ID
+const mountpointId = ref(-1); // Default mountpoint ID
 
 const status = computed(() => {
   if (isPublishing.value) return "Publishing";
@@ -26,46 +26,51 @@ const statusColor = computed(() => {
   return "error";
 });
 
+onMounted(async () => await getLocalStream());
+
+onUnmounted(() => cleanup());
+
 async function getLocalStream() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    localStream.value = await navigator.mediaDevices.getUserMedia({
       video: { width: 1280, height: 720 },
       audio: true,
     });
-    localStream.value = stream;
-    return stream;
   } catch (error) {
-    console.error("Error accessing media devices:", error);
+    // console.error("Error accessing media devices:", error);
     throw error;
   }
 }
-const mountPountId = ref(-1); // Default mountpoint ID
+
 async function joinRoom() {
   try {
+    if (!localStream.value) console.error("No local stream available");
     isConnecting.value = true;
-
-    // Get local stream first
-    await getLocalStream();
 
     janus.value = new JanusJs({
       server: "wss://janus1.januscaler.com/janus/ws",
     });
-    await janus.value.init({ debug: false });
+    await janus.value.init({
+      debug: false,
+    });
 
     session.value = await janus.value.createSession();
     publisher.value = await session.value.attach(JanusVideoRoomPlugin);
-
+    const username = `Publisher-${Date.now()}`;
+    await publisher.value.joinRoomAsPublisher(roomId.value, {
+      display: username,
+    });
     // Setup message handler
     publisher.value.onMessage.subscribe(async ({ jsep, message }: any) => {
-      console.log("Publisher message:", message, jsep);
+      // console.log("Publisher message:", message, jsep);
 
       if (message?.videoroom === "joined") {
-        console.log("Joined room successfully");
+        // console.log("Joined room successfully");
         isConnected.value = true;
         isConnecting.value = false;
         // Store the publisher's ID (this is the feed ID that subscribers need)
         publisherId.value = message.id;
-        console.log("Publisher ID (Feed ID):", publisherId.value);
+        // console.log("Publisher ID (Feed ID):", publisherId.value);
 
         // Register mountpoint with publisher ID
         try {
@@ -77,43 +82,37 @@ async function joinRoom() {
               publisherId: publisherId.value, // Include the publisher ID
             },
           })) as any;
-          mountPountId.value = response?.id;
+          mountpointId.value = response?.id;
 
-          console.log("Mountpoint registered:", response);
+          // console.log("Mountpoint registered:", response);
         } catch (error) {
-          console.error("Error registering mountpoint:", error);
+          // console.error("Error registering mountpoint:", error);
         }
       }
 
       if (message?.videoroom === "event") {
         if (message?.configured === "ok") {
-          console.log("Publisher configured successfully");
+          // console.log("Publisher configured successfully");
           isPublishing.value = true;
         }
       }
 
-      if (jsep) {
-        await publisher.value?.handleRemoteJsep({ jsep });
-      }
+      if (jsep) await publisher.value?.handleRemoteJsep({ jsep });
     });
 
-    // Setup remote track handler
-    publisher.value.onRemoteTrack.subscribe(({ track, on, mid }: any) => {
-      console.log("Remote track:", { track, on, mid });
-    });
+    // // Setup remote track handler
+    // publisher.value.onRemoteTrack.subscribe(({ track, on, mid }: any) => {
+    //   // console.log("Remote track:", { track, on, mid });
+    // });
 
     // Join room as publisher
-    const username = `Publisher-${Date.now()}`;
-    await publisher.value.joinRoomAsPublisher(roomId.value, {
-      display: username,
-    });
   } catch (error) {
-    console.error("Error joining room:", error);
+    // console.error("Error joining room:", error);
     isConnecting.value = false;
   }
 }
 
- async function publish () {
+async function publish() {
   if (!publisher.value || !localStream.value) return;
 
   try {
@@ -128,7 +127,7 @@ async function joinRoom() {
     console.error("Error publishing:", error);
     isPublishing.value = false;
   }
-};
+}
 
 async function leaveRoom() {
   try {
@@ -138,7 +137,7 @@ async function leaveRoom() {
 
     await $fetch("/api/mountpoints", {
       method: "DELETE",
-      body: { id: mountPountId.value },
+      body: { id: mountpointId.value },
     });
   } catch (error) {
     console.error("Error leaving room:", error);
@@ -148,6 +147,7 @@ async function leaveRoom() {
 }
 
 function cleanup() {
+  leaveRoom();
   if (localStream.value) {
     localStream.value.getTracks().forEach((track) => track.stop());
     localStream.value = null;
@@ -160,19 +160,17 @@ function cleanup() {
   publisher.value = null;
   session.value = null;
   janus.value = null;
-  mountPountId.value = -1;
+  mountpointId.value = -1;
 }
-
-onMounted(() => console.log("PublisherCard mounted"));
-
-onUnmounted(() => cleanup);
 </script>
 
 <template>
-  <UCard class="max-w-2xl mx-auto">
+  <UCard class="max-w-2xl mx-auto glass-card">
     <template #header>
       <div class="flex items-center justify-between">
-        <h3 class="text-lg font-semibold">Publisher - Videoroom</h3>
+        <h3 class="text-lg font-semibold text-primary">
+          Publisher - Videoroom
+        </h3>
         <UBadge :color="statusColor" variant="soft">
           {{ status }}
         </UBadge>
@@ -180,7 +178,6 @@ onUnmounted(() => cleanup);
     </template>
 
     <div class="space-y-6">
-      <!-- Local Video Preview -->
       <div
         class="relative bg-gray-100 rounded-lg overflow-hidden"
         style="aspect-ratio: 16/9"
@@ -194,13 +191,12 @@ onUnmounted(() => cleanup);
         />
         <div
           v-if="!localStream"
-          class="absolute inset-0 flex items-center justify-center text-gray-500"
+          class="absolute inset-0 flex items-center justify-center text-secondary"
         >
           No camera stream
         </div>
       </div>
 
-      <!-- Controls -->
       <div class="flex gap-3 justify-center">
         <UButton
           @click="joinRoom"
@@ -231,10 +227,10 @@ onUnmounted(() => cleanup);
       </div>
 
       <!-- Room Info -->
-      <div v-if="isConnected" class="text-sm text-gray-600 text-center">
+      <!-- <div v-if="isConnected" class="text-sm text-gray-600 text-center">
         Room ID: {{ roomId }}
         <div v-if="publisherId">Publisher ID (Feed): {{ publisherId }}</div>
-      </div>
+      </div> -->
     </div>
   </UCard>
 </template>

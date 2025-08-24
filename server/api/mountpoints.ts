@@ -37,7 +37,6 @@ export default defineEventHandler(async (event) => {
     if (mountpoint) {
       // Update publisher ID when publisher joins
       if (body.publisherId) mountpoint.publisherId = body.publisherId;
-
       // Update description if provided
       if (body.description) mountpoint.description = body.description;
 
@@ -50,10 +49,9 @@ export default defineEventHandler(async (event) => {
     // delete a mountpoint
     const body = await readBody(event);
     const mountpointId = body.id;
-    console.log("Deleting mountpoint ID:", mountpointId);
-    // mountpoints = mountpoints.filter((mp) => mp.id !== mountpointId);
+
     const index = mountpoints.findIndex((mp) => mp.id === mountpointId);
-    console.log("Found index:", index);
+
     if (index !== -1) mountpoints.splice(index, 1);
     return { success: true };
   }
